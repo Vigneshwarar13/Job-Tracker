@@ -1,4 +1,9 @@
 {
+  "name": "job-tracker-root",
+  "private": true,
+  "scripts": {
+    "build": "npm run build --prefix job-tracker"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
     "react-router-dom": "^7.15.1"

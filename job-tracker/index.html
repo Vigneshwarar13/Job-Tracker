@@ -10,7 +10,28 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: sans-serif;">
+        <div style="text-align: center;">
+          <h2 style="color: #1e293b; margin-bottom: 8px;">Loading JobTracker...</h2>
+          <p style="color: #64748b; font-size: 14px;">If this screen persists, please check the browser console for errors.</p>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        console.error('Global error:', msg, 'at', url, ':', lineNo);
+        var root = document.getElementById('root');
+        if (root && root.innerHTML.includes('Loading')) {
+          root.innerHTML = '<div style="padding: 20px; color: #ef4444; font-family: sans-serif;">' +
+            '<h3>Application Error</h3>' +
+            '<p>The app failed to load. This is usually due to missing environment variables or a script loading error.</p>' +
+            '<pre style="background: #f1f5f9; padding: 10px; border-radius: 8px; font-size: 12px; overflow: auto;">' + msg + '</pre>' +
+            '</div>';
+        }
+        return false;
+      };
+    </script>
   </body>
 </html>
