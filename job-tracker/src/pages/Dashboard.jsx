@@ -12,7 +12,9 @@ import { cn } from '../lib/utils'
 const FILTERS = [
   { label: 'All', value: 'All' },
   { label: 'Applied', value: 'Applied' },
+  { label: 'Screening', value: 'Screening' },
   { label: 'Online Test', value: 'OA' },
+  { label: 'Technical Interview', value: 'Technical Interview' },
   { label: 'Interview', value: 'Interview' },
   { label: 'Selected', value: 'Offered' },
   { label: 'Rejected', value: 'Rejected' },
