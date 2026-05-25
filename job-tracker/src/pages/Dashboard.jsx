@@ -1,20 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import Navbar from '../components/Navbar'
 import StatsRow from '../components/StatsRow'
 import AddApplicationForm from '../components/AddApplicationForm'
 import ApplicationTable from '../components/ApplicationTable'
+import GmailSync from '../components/GmailSync'
+import EditApplicationModal from '../components/EditApplicationModal'
 import { TableSkeleton } from '../components/Skeleton'
-import { Search, Calendar as CalendarIcon, AlertCircle } from 'lucide-react'
+import { requestNotificationPermission } from '../lib/notifications'
+import { Search, Calendar as CalendarIcon, AlertCircle, Clock, Target, Repeat, MessageSquare } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../lib/utils'
+import { getTodayInput, formatDateDisplay } from '../lib/dateUtils'
 
 const FILTERS = [
   { label: 'All', value: 'All' },
   { label: 'Applied', value: 'Applied' },
-  { label: 'Screening', value: 'Screening' },
   { label: 'Online Test', value: 'OA' },
-  { label: 'Technical Interview', value: 'Technical Interview' },
   { label: 'Interview', value: 'Interview' },
   { label: 'Selected', value: 'Offered' },
   { label: 'Rejected', value: 'Rejected' },
@@ -27,19 +29,23 @@ export default function Dashboard({ session }) {
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
+  const [editingApp, setEditingApp] = useState(null)
+
+  const fetchApps = useCallback(async () => {
+    const { data, error: err } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('user_id', user?.id)
+      .order('created_at', { ascending: false })
+    if (err) setError(err.message)
+    else setApps(data || [])
+    setLoading(false)
+  }, [user?.id])
 
   useEffect(() => {
-    const fetchApps = async () => {
-      const { data, error: err } = await supabase
-        .from('applications')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (err) setError(err.message)
-      else setApps(data || [])
-      setLoading(false)
-    }
     fetchApps()
-  }, [])
+    requestNotificationPermission()
+  }, [fetchApps])
 
   const handleAdd = async (formData) => {
     const clean = Object.fromEntries(
@@ -52,24 +58,66 @@ export default function Dashboard({ session }) {
     else setApps([data[0], ...apps])
   }
 
-  const handleStatusChange = async (id, newStatus) => {
+  const handleUpdate = async (id, updates) => {
     const { error } = await supabase
-      .from('applications').update({ status: newStatus }).eq('id', id)
-    if (!error)
-      setApps(apps.map(a => a.id === id ? { ...a, status: newStatus } : a))
+      .from('applications')
+      .update(updates)
+      .eq('id', id)
+      .eq('user_id', user?.id)
+    
+    if (!error) {
+      setApps(apps.map(a => a.id === id ? { ...a, ...updates } : a))
+    } else {
+      console.error('Update error:', error)
+      alert('Failed to update: ' + error.message)
+    }
+  }
+
+  const handleStatusChange = (id, newStatus) => {
+    handleUpdate(id, { status: newStatus })
   }
 
   const handleDelete = async (id) => {
     const { error } = await supabase
-      .from('applications').delete().eq('id', id)
+      .from('applications')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user?.id)
     if (!error) setApps(apps.filter(a => a.id !== id))
   }
 
-  const today = new Date().toISOString().split('T')[0]
-  const upcoming = apps
-    .filter(a => a.reminder && a.reminder >= today)
-    .sort((a, b) => a.reminder.localeCompare(b.reminder))
-    .slice(0, 3)
+  const today = getTodayInput()
+  
+  // Calculate upcoming events from all date fields
+  const upcoming = useMemo(() => {
+    const events = []
+    const dateFields = [
+      { key: 'reminder', label: 'Reminder', icon: Clock },
+      { key: 'interview_date', label: 'Interview', icon: CalendarIcon },
+      { key: 'deadline_date', label: 'Deadline', icon: Target },
+      { key: 'next_round_date', label: 'Next Round', icon: Repeat },
+      { key: 'follow_up_date', label: 'Follow-up', icon: MessageSquare }
+    ]
+
+    apps.forEach(app => {
+      dateFields.forEach(field => {
+        const date = app[field.key]
+        if (date && date >= today) {
+          events.push({
+            id: `${app.id}-${field.key}`,
+            company: app.company,
+            role: app.role,
+            date,
+            label: field.label,
+            icon: field.icon,
+            status: app.status
+          })
+        }
+      })
+    })
+
+    return events.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3)
+  }, [apps, today])
 
   const displayed = apps
     .filter(a => filter === 'All' || a.status === filter)
@@ -89,13 +137,17 @@ export default function Dashboard({ session }) {
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
+            className='flex flex-col md:flex-row md:items-center gap-6'
           >
-            <h1 className='text-4xl font-black text-slate-900 tracking-tight'>
-              Dashboard
-            </h1>
-            <p className='text-slate-500 mt-2 text-lg'>
-              Welcome back! You have <span className='font-bold text-primary-600'>{apps.length}</span> active applications.
-            </p>
+            <div>
+              <h1 className='text-4xl font-black text-slate-900 tracking-tight'>
+                Dashboard
+              </h1>
+              <p className='text-slate-500 mt-2 text-lg'>
+                Welcome back! You have <span className='font-bold text-primary-600'>{apps.length}</span> active applications.
+              </p>
+            </div>
+            <GmailSync userId={user?.id} onSyncComplete={fetchApps} />
           </motion.div>
 
           <motion.div 
@@ -144,20 +196,20 @@ export default function Dashboard({ session }) {
                 </div>
 
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-                  {upcoming.map(app => (
-                    <div key={app.id} className='bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:bg-white/15 transition-all group'>
+                  {upcoming.map(event => (
+                    <div key={event.id} className='bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 hover:bg-white/15 transition-all group'>
                       <div className='flex items-start justify-between mb-3'>
                         <div>
-                          <p className='font-bold text-lg leading-tight'>{app.company}</p>
-                          <p className='text-primary-200 text-sm mt-0.5'>{app.role}</p>
+                          <p className='font-bold text-lg leading-tight'>{event.company}</p>
+                          <p className='text-primary-200 text-sm mt-0.5'>{event.role}</p>
                         </div>
                         <div className='bg-primary-500/30 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider'>
-                          {app.status === 'OA' ? 'OA' : app.status}
+                          {event.label}
                         </div>
                       </div>
                       <div className='flex items-center gap-2 text-xs text-primary-100 font-medium'>
-                        <CalendarIcon className='w-3.5 h-3.5' />
-                        {app.reminder}
+                        <event.icon className='w-3.5 h-3.5' />
+                        {formatDateDisplay(event.date)}
                       </div>
                     </div>
                   ))}
@@ -207,12 +259,20 @@ export default function Dashboard({ session }) {
                 applications={displayed} 
                 onStatusChange={handleStatusChange} 
                 onDelete={handleDelete} 
+                onEdit={setEditingApp}
               />
             )}
           </div>
         </section>
 
       </main>
+
+      <EditApplicationModal 
+        app={editingApp} 
+        isOpen={!!editingApp} 
+        onClose={() => setEditingApp(null)} 
+        onSave={handleUpdate} 
+      />
     </div>
   )
 }

@@ -1,28 +1,64 @@
 import { useState } from 'react'
-import { Plus, X, Building2, Briefcase, Calendar, FileText } from 'lucide-react'
+import { Plus, X, Building2, Briefcase, FileText, Calendar, Clock, Target, Repeat, MessageSquare } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../lib/utils'
+import DateInput from './DateInput'
+import { getTodayInput, isDateAfter } from '../lib/dateUtils'
 
 const empty = {
-  company: '', role: '',
-  date_applied: new Date().toISOString().split('T')[0],
-  status: 'Applied', notes: '', reminder: ''
+  company: '', 
+  role: '',
+  date_applied: getTodayInput(),
+  status: 'Applied', 
+  notes: '', 
+  reminder: '',
+  interview_date: '',
+  deadline_date: '',
+  next_round_date: '',
+  follow_up_date: ''
 }
 
 export default function AddApplicationForm({ onAdd }) {
   const [form, setForm] = useState(empty)
+  const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
 
-  const handleChange = e =>
-    setForm({ ...form, [e.target.name]: e.target.value })
+  const handleChange = e => {
+    const { name, value } = e.target
+    setForm({ ...form, [name]: value })
+    
+    // Clear error when field is modified
+    if (errors[name]) {
+      setErrors({ ...errors, [name]: '' })
+    }
+
+    // Cross-field validation
+    if (name === 'reminder' && value && !isDateAfter(form.date_applied, value)) {
+      setErrors(prev => ({ ...prev, reminder: 'Reminder must be after application date' }))
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!form.company || !form.role) return
+    
+    // Final validation
+    const newErrors = {}
+    if (!form.company) newErrors.company = 'Company is required'
+    if (!form.role) newErrors.role = 'Role is required'
+    if (form.reminder && !isDateAfter(form.date_applied, form.reminder)) {
+      newErrors.reminder = 'Reminder must be after application date'
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+
     setLoading(true)
     await onAdd(form)
     setForm(empty)
+    setErrors({})
     setLoading(false)
     setIsOpen(false)
   }
@@ -70,8 +106,9 @@ export default function AddApplicationForm({ onAdd }) {
                   <div className='relative'>
                     <Building2 className='absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
                     <input name='company' value={form.company} onChange={handleChange}
-                      placeholder='e.g. Google' className={cn(inputCls, 'pl-10')} required />
+                      placeholder='e.g. Google' className={cn(inputCls, 'pl-10', errors.company && 'border-red-300 focus:ring-red-500/20 focus:border-red-500')} required />
                   </div>
+                  {errors.company && <p className="text-red-500 text-[10px] font-bold uppercase mt-1 ml-1">{errors.company}</p>}
                 </div>
 
                 <div className='md:col-span-1'>
@@ -79,8 +116,9 @@ export default function AddApplicationForm({ onAdd }) {
                   <div className='relative'>
                     <Briefcase className='absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
                     <input name='role' value={form.role} onChange={handleChange}
-                      placeholder='e.g. Frontend Engineer' className={cn(inputCls, 'pl-10')} required />
+                      placeholder='e.g. Frontend Engineer' className={cn(inputCls, 'pl-10', errors.role && 'border-red-300 focus:ring-red-500/20 focus:border-red-500')} required />
                   </div>
+                  {errors.role && <p className="text-red-500 text-[10px] font-bold uppercase mt-1 ml-1">{errors.role}</p>}
                 </div>
 
                 <div>
@@ -91,25 +129,56 @@ export default function AddApplicationForm({ onAdd }) {
                   </select>
                 </div>
 
-                <div>
-                  <label className={labelCls}>Date Applied</label>
-                  <div className='relative'>
-                    <Calendar className='absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none' />
-                    <input type='date' name='date_applied' value={form.date_applied}
-                      onChange={handleChange} className={cn(inputCls, 'pl-10')} />
-                  </div>
-                </div>
+                <DateInput 
+                  label="Applied Date" 
+                  name="date_applied" 
+                  value={form.date_applied} 
+                  onChange={handleChange} 
+                  required
+                />
 
-                <div>
-                  <label className={labelCls}>Reminder Date</label>
-                  <div className='relative'>
-                    <Calendar className='absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none' />
-                    <input type='date' name='reminder' value={form.reminder}
-                      onChange={handleChange} className={cn(inputCls, 'pl-10')} />
-                  </div>
-                </div>
+                <DateInput 
+                  label="Reminder Date" 
+                  name="reminder" 
+                  value={form.reminder} 
+                  onChange={handleChange}
+                  error={errors.reminder}
+                  icon={Clock}
+                />
 
-                <div>
+                <DateInput 
+                  label="Interview Date" 
+                  name="interview_date" 
+                  value={form.interview_date} 
+                  onChange={handleChange}
+                  icon={Calendar}
+                />
+
+                <DateInput 
+                  label="Deadline Date" 
+                  name="deadline_date" 
+                  value={form.deadline_date} 
+                  onChange={handleChange}
+                  icon={Target}
+                />
+
+                <DateInput 
+                  label="Next Round Date" 
+                  name="next_round_date" 
+                  value={form.next_round_date} 
+                  onChange={handleChange}
+                  icon={Repeat}
+                />
+
+                <DateInput 
+                  label="Follow-up Date" 
+                  name="follow_up_date" 
+                  value={form.follow_up_date} 
+                  onChange={handleChange}
+                  icon={MessageSquare}
+                />
+
+                <div className='md:col-span-3'>
                   <label className={labelCls}>Quick Notes</label>
                   <div className='relative'>
                     <FileText className='absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
